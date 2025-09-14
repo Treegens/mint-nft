@@ -14,15 +14,10 @@ const treegenImages = [
 
 export function AnimatedCharacter() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
-  const [isTransitioning, setIsTransitioning] = useState(false)
 
   useEffect(() => {
     const interval = setInterval(() => {
-      setIsTransitioning(true)
-      setTimeout(() => {
-        setCurrentImageIndex((prevIndex) => (prevIndex === treegenImages.length - 1 ? 0 : prevIndex + 1))
-        setIsTransitioning(false)
-      }, 500) // Half the transition duration for smooth crossfade
+      setCurrentImageIndex((prevIndex) => (prevIndex === treegenImages.length - 1 ? 0 : prevIndex + 1))
     }, 3000) // Slightly longer interval for better viewing
 
     return () => clearInterval(interval)

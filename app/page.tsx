@@ -2,6 +2,7 @@
 
 import { AnimatedCharacter } from "@/components/animated-character"
 import { ConnectWalletButton } from "@/components/connect-wallet-button"
+import { MintButton } from "@/components/mint-button"
 import { AudioPlayer } from "@/components/audio-player"
 import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
@@ -112,24 +113,15 @@ export default function Home() {
                   {"Mint While You Can (Only 1,000 Supply)"}
                 </h3>
                 <p className="text-muted-foreground">
-                  {"Each Treegen is unique and comes with AI agent capabilities and DAO governance rights."}
+                  {"Each Treegen is unique and comes with AI agent capabilities and DAO governance rights. (Testnet: 0.5 USDC)"}
                 </p>
               </div>
 
-              <Button
-                size="lg"
-                className="w-full h-14 text-lg font-semibold text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-200"
-                style={{ backgroundColor: "#deeb8b", color: "#191B1C" }}
-              >
-                <div className="flex items-center gap-3">
-                  <Image src="/images/tgn-token.png" alt="TGN Token" width={24} height={24} className="rounded-full" />
-                  {"Buy With TGN 2,000 TGN"}
-                </div>
-              </Button>
+              <MintButton />
 
               {/* Token Purchase Buttons */}
               <div className="space-y-3 pt-4 border-t border-border">
-                <p className="text-sm text-muted-foreground">{"Need $TGN tokens?"}</p>
+                <p className="text-sm text-muted-foreground">{"Need USDC for testing?"}</p>
 
                 <div className="grid gap-3">
                   <Button
@@ -140,12 +132,12 @@ export default function Home() {
                     asChild
                   >
                     <a
-                      href="https://app.uniswap.org/explore/tokens/base/0xd75dfa972c6136f1c594fec1945302f885e1ab29"
+                      href="https://faucet.circle.com/"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2"
                     >
-                      {"Buy TGN on Uniswap (USDC or ETH on Base)"}
+                      {"Get USDC from Circle Faucet (Testnet)"}
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   </Button>
@@ -158,12 +150,12 @@ export default function Home() {
                     asChild
                   >
                     <a
-                      href="https://www.relay.link/bridge/base?toCurrency=0xd75dfa972c6136f1c594fec1945302f885e1ab29&showChart=1"
+                      href="https://bridge.base.org/deposit"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2"
                     >
-                      {"Buy TGN with any Token on Any Chain"}
+                      {"Bridge to Base Sepolia Testnet"}
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   </Button>

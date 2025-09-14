@@ -155,3 +155,24 @@
 .animate-float {
   animation: float 4s ease-in-out infinite;
 }
+
+/* AppKit Button Styling */
+.appkit-button-wrapper {
+  --w3m-accent: #deeb8b;
+  --w3m-accent-foreground: #191B1C;
+  --w3m-background: transparent;
+  --w3m-border-radius: 0.5rem;
+  --w3m-border-width: 1px;
+  --w3m-border-color: #deeb8b;
+  --w3m-font-family: var(--font-outfit);
+  --w3m-font-size: 0.875rem;
+  --w3m-font-weight: 500;
+  --w3m-button-border-radius: 0.5rem;
+  --w3m-button-hover-highlight: rgba(222, 235, 139, 0.1);
+}
+
+.appkit-button-wrapper appkit-button {
+  height: 48px;
+  min-width: 120px;
+  font-family: var(--font-outfit);
+}

@@ -4,6 +4,8 @@ import { Outfit } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import { Suspense } from "react"
 import "./globals.css"
+import { headers } from "next/headers"
+import ContextProvider from "@/context"
 
 const outfit = Outfit({
   subsets: ["latin"],
@@ -18,16 +20,23 @@ export const metadata: Metadata = {
   generator: "v0.app",
 }
 
-export default function RootLayout({
+// ATTENTION!!! RootLayout must be an async function to use headers() 
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode
 }>) {
+  // Retrieve cookies from request headers on the server
+  const headersObj = await headers()
+  const cookies = headersObj.get('cookie')
+
   return (
     <html lang="en">
       <body className={`font-sans ${outfit.variable}`}>
-        <Suspense fallback={null}>{children}</Suspense>
-        <Analytics />
+        <ContextProvider cookies={cookies}>
+          <Suspense fallback={null}>{children}</Suspense>
+          <Analytics />
+        </ContextProvider>
       </body>
     </html>
   )
