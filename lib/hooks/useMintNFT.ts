@@ -120,10 +120,6 @@ export function useMintNFT() {
   }, [isConnected, address, hasEnoughBalance, writeContractTGN])
 
   // Stable callbacks to avoid changing references in effects
-  const approveTokensCb = useCallback(async () => {
-    return approveTokens()
-  }, [writeContractTGN, isConnected, address, hasEnoughBalance])
-
   // Helper to request approval and automatically mint after approval is confirmed
   const requestApprovalThenMint = useCallback(async () => {
     setAutoMintRequested(true)
@@ -170,9 +166,7 @@ export function useMintNFT() {
     }
   }, [isConnected, address, hasEnoughBalance, isApproved, writeContractNFT])
 
-  const mintNFTCb = useCallback(async () => {
-    return mintNFT()
-  }, [writeContractNFT, isConnected, address, isApproved])
+  // No extra wrapper needed — use the `mintNFT` callback directly where required
 
   const handleMint = async () => {
     if (!isApproved) {
