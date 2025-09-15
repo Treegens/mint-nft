@@ -113,7 +113,7 @@ export default function Home() {
                   {"Mint While You Can (Only 1,000 Supply)"}
                 </h3>
                 <p className="text-muted-foreground">
-                  {"Each Treegen is unique and comes with AI agent capabilities and DAO governance rights. (Testnet: 0.5 USDC)"}
+                  {"Each Treegen is unique and comes with AI agent capabilities and DAO governance rights. (2000 TGN)"}
                 </p>
               </div>
 
@@ -121,7 +121,7 @@ export default function Home() {
 
               {/* Token Purchase Buttons */}
               <div className="space-y-3 pt-4 border-t border-border">
-                <p className="text-sm text-muted-foreground">{"Need USDC for testing?"}</p>
+                <p className="text-sm text-muted-foreground">{"Need TGN tokens?"}</p>
 
                 <div className="grid gap-3">
                   <Button
@@ -137,7 +137,7 @@ export default function Home() {
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2"
                     >
-                      {"Get USDC from Circle Faucet (Testnet)"}
+                      {"Get TGN Tokens"}
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   </Button>
@@ -155,7 +155,7 @@ export default function Home() {
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2"
                     >
-                      {"Bridge to Base Sepolia Testnet"}
+                      {"Bridge to Base Mainnet"}
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   </Button>

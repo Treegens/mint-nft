@@ -10,43 +10,36 @@ export function MintButton() {
     isConnected,
     isApproving,
     isMinting,
-    isProcessing,
-    currentStep,
     error,
     approvalHash,
     mintHash,
-    usdcBalance,
+    tgnBalance,
     hasEnoughBalance,
     isApproved,
     setError,
     mintNFT,
     resetMintFlow,
-    approveAndMint,
+    handleMint,
+    approveTokens,
   } = useMintNFT()
 
   const [clicked, setClicked] = useState(false)
 
   const formatBalance = (balance: bigint | undefined | null) => {
     if (!balance) return "0"
-    // USDC has 6 decimals, so we need to divide by 1e6
-    return Number(balance) / 1e6
+    // TGN has 18 decimals, so we need to divide by 1e18
+    return Number(balance) / 1e18
   }
 
   const getButtonText = () => {
     if (!isConnected) return "Connect Wallet to Mint"
-    if (!hasEnoughBalance) return "Insufficient USDC Balance"
+    if (!hasEnoughBalance) return "Insufficient TGN Balance"
     
-    if (isProcessing || isApproving || isMinting) {
-      switch (currentStep) {
-        case 'approving':
-          return "Approving USDC..."
-        case 'approved':
-          return "Approved! Preparing mint..."
-        case 'minting':
-          return "Minting NFT..."
-        default:
-          return "Processing..."
-      }
+    if (isApproving) {
+      return "Approving TGN..."
+    }
+    if (isMinting) {
+      return "Minting NFT..."
     }
     
     if (isApproved) {
@@ -57,22 +50,18 @@ export function MintButton() {
   }
 
   const getButtonIcon = () => {
-    if (isProcessing || isApproving || isMinting || clicked) {
+    if (isApproving || isMinting || clicked) {
       return <Loader2 className="w-4 h-4 animate-spin" />
     }
-    
-    if (currentStep === 'approved') {
-      return <CheckCircle className="w-4 h-4 text-green-500" />
-    }
-    
-    if (currentStep === 'completed' || (isApproved && hasEnoughBalance)) {
+
+    if (isApproved && hasEnoughBalance) {
       return <CheckCircle className="w-4 h-4" />
     }
-    
-    return <span className="text-lg font-bold">$</span>
+
+    return <span className="text-lg font-bold">T</span>
   }
 
-  const isButtonDisabled = !isConnected || isProcessing || isApproving || isMinting || (!hasEnoughBalance && isConnected) || clicked
+  const isButtonDisabled = !isConnected || isApproving || isMinting || (!hasEnoughBalance && isConnected) || clicked
 
   // Show Mint Again button after successful mint
   const showMintAgain = !!mintHash
@@ -85,13 +74,7 @@ export function MintButton() {
     setError(null)
     
     try {
-      if (!isApproved) {
-        // Use the new single-click approve and mint flow
-        await approveAndMint()
-      } else {
-        // Just mint if already approved
-        await mintNFT()
-      }
+      await handleMint()
     } catch (err) {
       console.error('Mint click error:', err)
       setError(typeof err === "string" ? err : "Action failed. Please try again.")
@@ -103,20 +86,17 @@ export function MintButton() {
 
   // Get current status for display
   const getStatusDisplay = () => {
-    if (currentStep === 'approving' || isApproving) {
-      return { title: "Approving USDC", subtitle: "Confirm approval in your wallet", type: "pending" as const }
+    if (isApproving) {
+      return { title: "Approving TGN", subtitle: "Confirm approval in your wallet", type: "pending" as const }
     }
-    if (currentStep === 'approved') {
-      return { title: "Approval Confirmed", subtitle: "Preparing to mint NFT...", type: "success" as const }
-    }
-    if (currentStep === 'minting' || isMinting) {
+    if (isMinting) {
       return { title: "Minting NFT", subtitle: "Confirm mint transaction in your wallet", type: "pending" as const }
     }
-    if (currentStep === 'failed') {
-      return { title: "Transaction Cancelled", subtitle: error ?? "You rejected the request or it failed.", type: "failed" as const }
-    }
-    if (currentStep === 'completed' && mintHash) {
+    if (mintHash) {
       return { title: "NFT Minted Successfully!", subtitle: "Your NFT has been minted", type: "success" as const }
+    }
+    if (error) {
+      return { title: "Transaction Failed", subtitle: error, type: "failed" as const }
     }
     return null
   }
@@ -153,7 +133,7 @@ export function MintButton() {
               {statusDisplay.subtitle}
             </p>
           </div>
-          {currentStep === 'completed' && mintHash && (
+          {mintHash && (
             <Button
               size="sm"
               variant="outline"
@@ -161,7 +141,7 @@ export function MintButton() {
               asChild
             >
               <a
-                href={`https://sepolia.basescan.org/tx/${mintHash}`}
+                href={`https://basescan.org/tx/${mintHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1"
@@ -189,9 +169,9 @@ export function MintButton() {
       )}
 
       {/* Balance Display */}
-      {isConnected && usdcBalance !== undefined && (
+      {isConnected && tgnBalance !== undefined && (
         <div className="text-center text-sm text-muted-foreground">
-          Your USDC Balance: {formatBalance(usdcBalance as bigint | undefined | null)} USDC
+          Your TGN Balance: {formatBalance(tgnBalance as bigint | undefined | null)} TGN
         </div>
       )}
 
@@ -230,18 +210,18 @@ export function MintButton() {
       {/* Status Messages */}
       {isConnected && !hasEnoughBalance && (
         <p className="text-center text-sm text-red-400">
-          You need at least 0.5 USDC to mint. Get USDC from a faucet or bridge.
+          You need at least 2000 TGN to mint. Get TGN tokens to proceed.
         </p>
       )}
 
       {/* Success celebration - only show if completed and not showing status above */}
-      {currentStep === 'completed' && mintHash && !statusDisplay && (
+      {mintHash && !statusDisplay && (
         <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-md text-green-400">
           <div className="flex-1 text-sm">
             <div className="font-medium">🎉 NFT minted successfully!</div>
             <div>
               <a
-                href={`https://sepolia.basescan.org/tx/${mintHash}`}
+                href={`https://basescan.org/tx/${mintHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline text-green-500 hover:text-green-700"

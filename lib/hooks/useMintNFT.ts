@@ -3,13 +3,14 @@
 import { useState, useEffect, useCallback } from "react"
 import { useAccount, useWriteContract, useReadContract } from "wagmi"
 import { parseUnits } from "viem"
-import USDCTokenABI from "@/lib/abi/USDCToken.json"
+import TGNTokenABI from "@/lib/abi/TGNToken.json"
 import NFTContractABI from "@/lib/abi/NFTContract.json"
 
-// Contract addresses - Base Sepolia testnet for testing
-const USDC_TOKEN_ADDRESS = "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as const
-const NFT_CONTRACT_ADDRESS = "0x6d636e75F32d408f8225BA7e3E0155B98c359E69" as const
-const MINT_PRICE = parseUnits("0.5", 6) // 0.5 USDC (6 decimals)
+// Contract addresses - Base mainnet for production
+const TGN_TOKEN_ADDRESS = "0xd75dfa972c6136f1c594fec1945302f885e1ab29" as const
+const NFT_CONTRACT_ADDRESS = "0xef8B62026895A09D6A631181008969677b7A5ABB" as const
+const MANAGEMENT_CONTRACT_ADDRESS = "0x43576228672F058dE4131A1C0996A920E3B68028" as const
+const MINT_PRICE = parseUnits("2000", 18) // 2000 TGN (18 decimals)
 
 export function useMintNFT() {
   const { address, isConnected } = useAccount()
@@ -20,28 +21,9 @@ export function useMintNFT() {
   const [mintHashState, setMintHashState] = useState<`0x${string}` | undefined>(undefined)
   const [minted, setMinted] = useState(false)
   const [autoMintRequested, setAutoMintRequested] = useState(false)
-  const [isProcessing, setIsProcessing] = useState(false)
-  const [currentStep, setCurrentStep] = useState<'idle' | 'approving' | 'approved' | 'minting' | 'completed' | 'failed'>('idle')
-  const [currentAction, setCurrentAction] = useState<'approve' | 'mint' | null>(null)
-
-  // Helpers
-  const getMessage = (e: unknown) => {
-    if (typeof e === "object" && e !== null && "message" in e) {
-      return String((e as { message?: unknown }).message)
-    }
-    return String(e)
-  }
-
-  const isUserRejectedError = (e: unknown) => {
-    const anyErr = e as { code?: unknown; name?: unknown; message?: unknown }
-    const code = anyErr?.code
-    const name = typeof anyErr?.name === 'string' ? anyErr.name.toLowerCase() : ''
-    const msg = typeof anyErr?.message === 'string' ? anyErr.message.toLowerCase() : getMessage(e).toLowerCase()
-    return code === 4001 || name.includes('userrejected') || msg.includes('user rejected') || msg.includes('rejected the request')
-  }
 
   // Contract write functions
-  const { writeContract: writeContractUSDC, data: approvalTxHash } = useWriteContract()
+  const { writeContract: writeContractTGN, data: approvalTxHash } = useWriteContract()
   const { writeContract: writeContractNFT, data: mintTxHash } = useWriteContract()
 
   // Persist hashes locally so UI can keep them until user resets
@@ -54,10 +36,10 @@ export function useMintNFT() {
     if (mintTxHash) setMintHashState(mintTxHash as unknown as `0x${string}`)
   }, [mintTxHash])
 
-  // Read user's USDC balance
-  const { data: usdcBalance } = useReadContract({
-    address: USDC_TOKEN_ADDRESS,
-    abi: USDCTokenABI,
+  // Read user's TGN balance
+  const { data: tgnBalance } = useReadContract({
+    address: TGN_TOKEN_ADDRESS,
+    abi: TGNTokenABI,
     functionName: "balanceOf",
     args: address ? [address] : undefined,
     query: {
@@ -67,10 +49,10 @@ export function useMintNFT() {
 
   // Read current allowance
   const { data: allowance } = useReadContract({
-    address: USDC_TOKEN_ADDRESS,
-    abi: USDCTokenABI,
+    address: TGN_TOKEN_ADDRESS,
+    abi: TGNTokenABI,
     functionName: "allowance",
-    args: address ? [address, NFT_CONTRACT_ADDRESS] : undefined,
+    args: address ? [address, MANAGEMENT_CONTRACT_ADDRESS] : undefined,
     query: {
       enabled: !!address,
     },
@@ -95,8 +77,8 @@ export function useMintNFT() {
     functionName: "maxSupply",
   })
 
-  // Check if user has enough USDC balance
-  const hasEnoughBalance = typeof usdcBalance === "bigint" ? usdcBalance >= MINT_PRICE : false
+  // Check if user has enough TGN balance
+  const hasEnoughBalance = typeof tgnBalance === "bigint" ? tgnBalance >= MINT_PRICE : false
 
   // Check if user has approved enough tokens
   const isApproved = typeof allowance === "bigint" ? allowance >= MINT_PRICE : false
@@ -104,66 +86,69 @@ export function useMintNFT() {
   const approveTokens = useCallback(async () => {
     if (!isConnected || !address) {
       setError("Please connect your wallet first")
-      return false
+      return
     }
 
     if (!hasEnoughBalance) {
-      setError("Insufficient USDC balance. You need at least 0.5 USDC.")
-      return false
+      setError("Insufficient TGN balance. You need at least 2000 TGN.")
+      return
     }
 
     try {
       setIsApproving(true)
-      setCurrentAction('approve')
-      setCurrentStep('approving')
       setError(null)
-      await writeContractUSDC({
-        address: USDC_TOKEN_ADDRESS,
-        abi: USDCTokenABI,
+      await writeContractTGN({
+        address: TGN_TOKEN_ADDRESS,
+        abi: TGNTokenABI,
         functionName: "approve",
-        args: [NFT_CONTRACT_ADDRESS, MINT_PRICE],
+        args: [MANAGEMENT_CONTRACT_ADDRESS, MINT_PRICE],
       })
-      return true
     } catch (err: unknown) {
       console.error("Approval failed:", err)
-      if (isUserRejectedError(err)) {
-        setError("You rejected the approval in wallet.")
-      } else {
-        setError(getMessage(err) || "Failed to approve USDC tokens. Please try again.")
+      const getMessage = (e: unknown) => {
+        if (typeof e === "object" && e !== null && "message" in e) {
+          return String((e as { message?: unknown }).message)
+        }
+        return String(e)
       }
-      setCurrentStep('failed')
+      setError(getMessage(err) || "Failed to approve TGN tokens. Please try again.")
+      // If approval fails, cancel any pending auto-mint request
       setAutoMintRequested(false)
-      return false
     } finally {
       setIsApproving(false)
     }
-  }, [isConnected, address, hasEnoughBalance, writeContractUSDC])
+  }, [isConnected, address, hasEnoughBalance, writeContractTGN])
 
   // Stable callbacks to avoid changing references in effects
   const approveTokensCb = useCallback(async () => {
     return approveTokens()
-  }, [writeContractUSDC, isConnected, address, hasEnoughBalance])
+  }, [writeContractTGN, isConnected, address, hasEnoughBalance])
+
+  // Helper to request approval and automatically mint after approval is confirmed
+  const requestApprovalThenMint = useCallback(async () => {
+    setAutoMintRequested(true)
+    await approveTokens()
+    // do not clear autoMintRequested here - allow the allowance watcher to trigger mint
+  }, [approveTokens])
 
   const mintNFT = useCallback(async () => {
     if (!isConnected || !address) {
       setError("Please connect your wallet first")
-      return false
+      return
     }
 
     if (!hasEnoughBalance) {
-      setError("Insufficient USDC balance. You need at least 0.5 USDC.")
-      return false
+      setError("Insufficient TGN balance. You need at least 2000 TGN.")
+      return
     }
 
     if (!isApproved) {
-      setError("Please approve USDC tokens first")
-      return false
+      setError("Please approve TGN tokens first")
+      return
     }
 
     try {
       setIsMinting(true)
-      setCurrentAction('mint')
-      setCurrentStep('minting')
       setError(null)
       await writeContractNFT({
         address: NFT_CONTRACT_ADDRESS,
@@ -171,16 +156,15 @@ export function useMintNFT() {
         functionName: "mintNFTasUser",
       })
       setMinted(true)
-      return true
     } catch (err: unknown) {
       console.error("Minting failed:", err)
-      if (isUserRejectedError(err)) {
-        setError("You rejected the mint in wallet.")
-      } else {
-        setError(getMessage(err) || "Failed to mint NFT. Please try again.")
+      const getMessage = (e: unknown) => {
+        if (typeof e === "object" && e !== null && "message" in e) {
+          return String((e as { message?: unknown }).message)
+        }
+        return String(e)
       }
-      setCurrentStep('failed')
-      return false
+      setError(getMessage(err) || "Failed to mint NFT. Please try again.")
     } finally {
       setIsMinting(false)
     }
@@ -190,49 +174,6 @@ export function useMintNFT() {
     return mintNFT()
   }, [writeContractNFT, isConnected, address, isApproved])
 
-  // Single-click approve and mint flow
-  const approveAndMint = useCallback(async () => {
-    if (isProcessing) return false
-    
-    setIsProcessing(true)
-    setError(null)
-    
-    try {
-      // If already approved, just mint
-      if (isApproved) {
-        const success = await mintNFT()
-        if (success) {
-          setCurrentStep('completed')
-        }
-        return success
-      }
-      
-      // Otherwise, approve first then mint
-      setAutoMintRequested(true)
-      const approvalSuccess = await approveTokens()
-      if (!approvalSuccess) {
-        setAutoMintRequested(false)
-        return false
-      }
-      
-      // Don't mint here - let the allowance watcher handle it
-      return true
-    } catch (err) {
-      console.error("Approve and mint failed:", err)
-      setError("Transaction failed. Please try again.")
-      setCurrentStep('idle')
-      setAutoMintRequested(false)
-      return false
-    } finally {
-      setIsProcessing(false)
-    }
-  }, [isProcessing, isApproved, mintNFT, approveTokens])
-
-  // Helper to request approval and automatically mint after approval is confirmed
-  const requestApprovalThenMint = useCallback(async () => {
-    return approveAndMint()
-  }, [approveAndMint])
-
   const handleMint = async () => {
     if (!isApproved) {
       await approveTokens()
@@ -241,45 +182,28 @@ export function useMintNFT() {
     }
   }
 
-  // Watch for approval confirmation and auto-mint
+  // Watch allowance and when it's sufficient and auto-mint requested, start minting
   useEffect(() => {
-    if (autoMintRequested && isApproved && !isMinting && !isApproving) {
+    if (autoMintRequested && isApproved && !isMinting) {
+      // clear the flag and trigger mint
       setAutoMintRequested(false)
-      setCurrentStep('approved')
-      
-      // Small delay to show approved state, then mint
-      const timer = setTimeout(async () => {
-        const success = await mintNFT()
-        if (success) {
-          setCurrentStep('completed')
-        }
-      }, 500)
-      
-      return () => clearTimeout(timer)
+      // fire-and-forget mint (we don't await here to avoid double-awaits upstream)
+      mintNFT().catch((err) => console.error("Auto-mint failed:", err))
     }
-  }, [autoMintRequested, isApproved, isMinting, isApproving, mintNFT])
-
-  // Update current step based on transaction hashes
-  useEffect(() => {
-    if (mintHashState && currentStep !== 'completed') {
-      setCurrentStep('completed')
-    }
-  }, [mintHashState, currentStep])
+  }, [autoMintRequested, isApproved, isMinting, mintNFT])
 
   return {
     // State
     isConnected,
     isApproving,
     isMinting,
-    isProcessing,
-    currentStep,
     error,
-    approvalHash: approvalHashState,
-    mintHash: mintHashState,
+  approvalHash: approvalHashState,
+  mintHash: mintHashState,
     minted,
 
     // Data
-    usdcBalance,
+    tgnBalance,
     allowance,
     mintPrice,
     totalSupply,
@@ -290,7 +214,6 @@ export function useMintNFT() {
     // Actions
     approveTokens,
     mintNFT,
-    approveAndMint,
     handleMint,
     setError,
     resetMintFlow: () => {
@@ -299,8 +222,7 @@ export function useMintNFT() {
       setApprovalHashState(undefined)
       setMintHashState(undefined)
       setAutoMintRequested(false)
-      setIsProcessing(false)
-      setCurrentStep('idle')
+      // Optionally reset other states if needed
     },
     requestApprovalThenMint,
   }

@@ -12,8 +12,8 @@ if (!projectId) {
 }
 
 // Define supported networks, explicitly typed as a non-empty array of Chains
-// Base Sepolia for testing, Base mainnet for production
-export const networks: [Chain, ...Chain[]] = [baseSepolia, base]
+// Base mainnet for production
+export const networks: [Chain, ...Chain[]] = [base]
 
 // Create the Wagmi adapter instance
 export const wagmiAdapter = new WagmiAdapter({
