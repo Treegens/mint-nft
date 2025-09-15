@@ -20,6 +20,25 @@ export function useMintNFT() {
   const [mintHashState, setMintHashState] = useState<`0x${string}` | undefined>(undefined)
   const [minted, setMinted] = useState(false)
   const [autoMintRequested, setAutoMintRequested] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [currentStep, setCurrentStep] = useState<'idle' | 'approving' | 'approved' | 'minting' | 'completed' | 'failed'>('idle')
+  const [currentAction, setCurrentAction] = useState<'approve' | 'mint' | null>(null)
+
+  // Helpers
+  const getMessage = (e: unknown) => {
+    if (typeof e === "object" && e !== null && "message" in e) {
+      return String((e as { message?: unknown }).message)
+    }
+    return String(e)
+  }
+
+  const isUserRejectedError = (e: unknown) => {
+    const anyErr = e as { code?: unknown; name?: unknown; message?: unknown }
+    const code = anyErr?.code
+    const name = typeof anyErr?.name === 'string' ? anyErr.name.toLowerCase() : ''
+    const msg = typeof anyErr?.message === 'string' ? anyErr.message.toLowerCase() : getMessage(e).toLowerCase()
+    return code === 4001 || name.includes('userrejected') || msg.includes('user rejected') || msg.includes('rejected the request')
+  }
 
   // Contract write functions
   const { writeContract: writeContractUSDC, data: approvalTxHash } = useWriteContract()
@@ -85,16 +104,18 @@ export function useMintNFT() {
   const approveTokens = useCallback(async () => {
     if (!isConnected || !address) {
       setError("Please connect your wallet first")
-      return
+      return false
     }
 
     if (!hasEnoughBalance) {
       setError("Insufficient USDC balance. You need at least 0.5 USDC.")
-      return
+      return false
     }
 
     try {
       setIsApproving(true)
+      setCurrentAction('approve')
+      setCurrentStep('approving')
       setError(null)
       await writeContractUSDC({
         address: USDC_TOKEN_ADDRESS,
@@ -102,17 +123,17 @@ export function useMintNFT() {
         functionName: "approve",
         args: [NFT_CONTRACT_ADDRESS, MINT_PRICE],
       })
+      return true
     } catch (err: unknown) {
       console.error("Approval failed:", err)
-      const getMessage = (e: unknown) => {
-        if (typeof e === "object" && e !== null && "message" in e) {
-          return String((e as { message?: unknown }).message)
-        }
-        return String(e)
+      if (isUserRejectedError(err)) {
+        setError("You rejected the approval in wallet.")
+      } else {
+        setError(getMessage(err) || "Failed to approve USDC tokens. Please try again.")
       }
-      setError(getMessage(err) || "Failed to approve USDC tokens. Please try again.")
-      // If approval fails, cancel any pending auto-mint request
+      setCurrentStep('failed')
       setAutoMintRequested(false)
+      return false
     } finally {
       setIsApproving(false)
     }
@@ -123,31 +144,26 @@ export function useMintNFT() {
     return approveTokens()
   }, [writeContractUSDC, isConnected, address, hasEnoughBalance])
 
-  // Helper to request approval and automatically mint after approval is confirmed
-  const requestApprovalThenMint = useCallback(async () => {
-    setAutoMintRequested(true)
-    await approveTokens()
-    // do not clear autoMintRequested here - allow the allowance watcher to trigger mint
-  }, [approveTokens])
-
   const mintNFT = useCallback(async () => {
     if (!isConnected || !address) {
       setError("Please connect your wallet first")
-      return
+      return false
     }
 
     if (!hasEnoughBalance) {
       setError("Insufficient USDC balance. You need at least 0.5 USDC.")
-      return
+      return false
     }
 
     if (!isApproved) {
       setError("Please approve USDC tokens first")
-      return
+      return false
     }
 
     try {
       setIsMinting(true)
+      setCurrentAction('mint')
+      setCurrentStep('minting')
       setError(null)
       await writeContractNFT({
         address: NFT_CONTRACT_ADDRESS,
@@ -155,15 +171,16 @@ export function useMintNFT() {
         functionName: "mintNFTasUser",
       })
       setMinted(true)
+      return true
     } catch (err: unknown) {
       console.error("Minting failed:", err)
-      const getMessage = (e: unknown) => {
-        if (typeof e === "object" && e !== null && "message" in e) {
-          return String((e as { message?: unknown }).message)
-        }
-        return String(e)
+      if (isUserRejectedError(err)) {
+        setError("You rejected the mint in wallet.")
+      } else {
+        setError(getMessage(err) || "Failed to mint NFT. Please try again.")
       }
-      setError(getMessage(err) || "Failed to mint NFT. Please try again.")
+      setCurrentStep('failed')
+      return false
     } finally {
       setIsMinting(false)
     }
@@ -173,6 +190,49 @@ export function useMintNFT() {
     return mintNFT()
   }, [writeContractNFT, isConnected, address, isApproved])
 
+  // Single-click approve and mint flow
+  const approveAndMint = useCallback(async () => {
+    if (isProcessing) return false
+    
+    setIsProcessing(true)
+    setError(null)
+    
+    try {
+      // If already approved, just mint
+      if (isApproved) {
+        const success = await mintNFT()
+        if (success) {
+          setCurrentStep('completed')
+        }
+        return success
+      }
+      
+      // Otherwise, approve first then mint
+      setAutoMintRequested(true)
+      const approvalSuccess = await approveTokens()
+      if (!approvalSuccess) {
+        setAutoMintRequested(false)
+        return false
+      }
+      
+      // Don't mint here - let the allowance watcher handle it
+      return true
+    } catch (err) {
+      console.error("Approve and mint failed:", err)
+      setError("Transaction failed. Please try again.")
+      setCurrentStep('idle')
+      setAutoMintRequested(false)
+      return false
+    } finally {
+      setIsProcessing(false)
+    }
+  }, [isProcessing, isApproved, mintNFT, approveTokens])
+
+  // Helper to request approval and automatically mint after approval is confirmed
+  const requestApprovalThenMint = useCallback(async () => {
+    return approveAndMint()
+  }, [approveAndMint])
+
   const handleMint = async () => {
     if (!isApproved) {
       await approveTokens()
@@ -181,24 +241,41 @@ export function useMintNFT() {
     }
   }
 
-  // Watch allowance and when it's sufficient and auto-mint requested, start minting
+  // Watch for approval confirmation and auto-mint
   useEffect(() => {
-    if (autoMintRequested && isApproved && !isMinting) {
-      // clear the flag and trigger mint
+    if (autoMintRequested && isApproved && !isMinting && !isApproving) {
       setAutoMintRequested(false)
-      // fire-and-forget mint (we don't await here to avoid double-awaits upstream)
-      mintNFT().catch((err) => console.error("Auto-mint failed:", err))
+      setCurrentStep('approved')
+      
+      // Small delay to show approved state, then mint
+      const timer = setTimeout(async () => {
+        const success = await mintNFT()
+        if (success) {
+          setCurrentStep('completed')
+        }
+      }, 500)
+      
+      return () => clearTimeout(timer)
     }
-  }, [autoMintRequested, isApproved, isMinting, mintNFT])
+  }, [autoMintRequested, isApproved, isMinting, isApproving, mintNFT])
+
+  // Update current step based on transaction hashes
+  useEffect(() => {
+    if (mintHashState && currentStep !== 'completed') {
+      setCurrentStep('completed')
+    }
+  }, [mintHashState, currentStep])
 
   return {
     // State
     isConnected,
     isApproving,
     isMinting,
+    isProcessing,
+    currentStep,
     error,
-  approvalHash: approvalHashState,
-  mintHash: mintHashState,
+    approvalHash: approvalHashState,
+    mintHash: mintHashState,
     minted,
 
     // Data
@@ -213,6 +290,7 @@ export function useMintNFT() {
     // Actions
     approveTokens,
     mintNFT,
+    approveAndMint,
     handleMint,
     setError,
     resetMintFlow: () => {
@@ -221,7 +299,8 @@ export function useMintNFT() {
       setApprovalHashState(undefined)
       setMintHashState(undefined)
       setAutoMintRequested(false)
-      // Optionally reset other states if needed
+      setIsProcessing(false)
+      setCurrentStep('idle')
     },
     requestApprovalThenMint,
   }

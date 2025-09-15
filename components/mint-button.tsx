@@ -2,15 +2,16 @@
 
 import React, { useState } from "react"
 import { useMintNFT } from "@/lib/hooks/useMintNFT"
-import { TransactionStatus } from "@/components/transaction-status"
 import { Button } from "@/components/ui/button"
-import { Loader2, CheckCircle, AlertCircle } from "lucide-react"
+import { Loader2, CheckCircle, AlertCircle, ExternalLink } from "lucide-react"
 
 export function MintButton() {
   const {
     isConnected,
     isApproving,
     isMinting,
+    isProcessing,
+    currentStep,
     error,
     approvalHash,
     mintHash,
@@ -20,8 +21,10 @@ export function MintButton() {
     setError,
     mintNFT,
     resetMintFlow,
-    requestApprovalThenMint,
+    approveAndMint,
   } = useMintNFT()
+
+  const [clicked, setClicked] = useState(false)
 
   const formatBalance = (balance: bigint | undefined | null) => {
     if (!balance) return "0"
@@ -32,103 +35,144 @@ export function MintButton() {
   const getButtonText = () => {
     if (!isConnected) return "Connect Wallet to Mint"
     if (!hasEnoughBalance) return "Insufficient USDC Balance"
-    return "Mint NFT"
+    
+    if (isProcessing || isApproving || isMinting) {
+      switch (currentStep) {
+        case 'approving':
+          return "Approving USDC..."
+        case 'approved':
+          return "Approved! Preparing mint..."
+        case 'minting':
+          return "Minting NFT..."
+        default:
+          return "Processing..."
+      }
+    }
+    
+    if (isApproved) {
+      return "Mint NFT"
+    }
+    
+    return "Approve & Mint NFT"
   }
 
   const getButtonIcon = () => {
-    if (isApproving || isMinting) {
+    if (isProcessing || isApproving || isMinting || clicked) {
       return <Loader2 className="w-4 h-4 animate-spin" />
     }
-    if (clicked) {
-      // show micro-spinner during the click buffer for immediate feedback
-      return <Loader2 className="w-4 h-4 animate-spin text-[#191B1C]" />
+    
+    if (currentStep === 'approved') {
+      return <CheckCircle className="w-4 h-4 text-green-500" />
     }
-    if (isApproved && hasEnoughBalance) {
+    
+    if (currentStep === 'completed' || (isApproved && hasEnoughBalance)) {
       return <CheckCircle className="w-4 h-4" />
     }
+    
     return <span className="text-lg font-bold">$</span>
   }
 
-  const isButtonDisabled = !isConnected || isApproving || isMinting || (!hasEnoughBalance && isConnected)
+  const isButtonDisabled = !isConnected || isProcessing || isApproving || isMinting || (!hasEnoughBalance && isConnected) || clicked
 
   // Show Mint Again button after successful mint
   const showMintAgain = !!mintHash
-  const [clicked, setClicked] = useState(false)
-  // 0 = none, 1 = approval pending, 2 = mint pending
-  const [pendingStep, setPendingStep] = useState<0 | 1 | 2>(0)
-  const [autoMintRequested, setAutoMintRequested] = useState(false)
 
   // When user clicks mint, set a short-lived clicked state to show buffered animation
   const onMintClick = async () => {
     if (isButtonDisabled || clicked) return
+    
     setClicked(true)
+    setError(null)
+    
     try {
       if (!isApproved) {
-        setPendingStep(1)
-        setAutoMintRequested(true)
-        // Request approval via hook; we'll call mintNFT on approval success
-        await requestApprovalThenMint()
+        // Use the new single-click approve and mint flow
+        await approveAndMint()
       } else {
-        setPendingStep(2)
+        // Just mint if already approved
         await mintNFT()
       }
     } catch (err) {
-      setPendingStep(0)
+      console.error('Mint click error:', err)
       setError(typeof err === "string" ? err : "Action failed. Please try again.")
     } finally {
-      setClicked(false)
+      // Clear clicked state after a short delay for better UX
+      setTimeout(() => setClicked(false), 300)
     }
   }
 
-  // If mint tx has been submitted, ensure pendingStep reflects minting
-  React.useEffect(() => {
-    if (mintHash) {
-      setPendingStep(2)
+  // Get current status for display
+  const getStatusDisplay = () => {
+    if (currentStep === 'approving' || isApproving) {
+      return { title: "Approving USDC", subtitle: "Confirm approval in your wallet", type: "pending" as const }
     }
-  }, [mintHash])
+    if (currentStep === 'approved') {
+      return { title: "Approval Confirmed", subtitle: "Preparing to mint NFT...", type: "success" as const }
+    }
+    if (currentStep === 'minting' || isMinting) {
+      return { title: "Minting NFT", subtitle: "Confirm mint transaction in your wallet", type: "pending" as const }
+    }
+    if (currentStep === 'failed') {
+      return { title: "Transaction Cancelled", subtitle: error ?? "You rejected the request or it failed.", type: "failed" as const }
+    }
+    if (currentStep === 'completed' && mintHash) {
+      return { title: "NFT Minted Successfully!", subtitle: "Your NFT has been minted", type: "success" as const }
+    }
+    return null
+  }
+  
+  const statusDisplay = getStatusDisplay()
 
   return (
     <div className="space-y-4">
-      {/* Transaction Status */}
-      {/* Step 1: Approve USDC tokens */}
-      <TransactionStatus
-        hash={approvalHash}
-        pendingTitle={"Approving USDC"}
-        pendingSubtitle={"Confirm approval in your wallet"}
-        successTitle={"Approval confirmed"}
-        successSubtitle={"USDC is approved for minting"}
-        onError={() => {
-          // leave error handling to hook
-          setPendingStep(0)
-          setAutoMintRequested(false)
-        }}
-        onSuccess={async () => {
-          // when approval is confirmed, advance to the mint pending UI
-          setPendingStep(2)
-          if (autoMintRequested) {
-            setAutoMintRequested(false)
-            // start minting (this should open the wallet popup)
-            await mintNFT()
-          }
-        }}
-        // Show pending immediately when pendingStep is 1, or during approval
-        forcePending={pendingStep === 1 || isApproving}
-      />
-
-      {/* Step 2: Mint the NFT */}
-      <TransactionStatus
-        hash={mintHash}
-        pendingTitle={"Minting NFT"}
-        pendingSubtitle={"Mint transaction is being confirmed"}
-        successTitle={"Mint successful"}
-        successSubtitle={"Your NFT has been minted"}
-        onDismiss={() => resetMintFlow()}
-        onError={() => {
-          // leave error handling to hook
-        }}
-        // Show pending immediately when pendingStep is 2, or during minting
-        forcePending={pendingStep === 2 || isMinting}
-      />
+      {/* Unified Transaction Status */}
+      {statusDisplay && (
+        <div className={`flex items-center gap-3 p-4 rounded-md border ${
+          statusDisplay.type === 'pending' 
+            ? 'bg-blue-500/10 border-blue-500/20' 
+            : statusDisplay.type === 'failed'
+            ? 'bg-red-500/10 border-red-500/20'
+            : 'bg-green-500/10 border-green-500/20'
+        }`}>
+          {statusDisplay.type === 'pending' ? (
+            <Loader2 className="w-5 h-5 animate-spin text-blue-400" />
+          ) : statusDisplay.type === 'failed' ? (
+            <AlertCircle className="w-5 h-5 text-red-400" />
+          ) : (
+            <CheckCircle className="w-5 h-5 text-green-400" />
+          )}
+          <div className="flex-1">
+            <p className={`text-sm font-medium ${
+              statusDisplay.type === 'pending' ? 'text-blue-400' : statusDisplay.type === 'failed' ? 'text-red-400' : 'text-green-400'
+            }`}>
+              {statusDisplay.title}
+            </p>
+            <p className={`text-xs ${
+              statusDisplay.type === 'pending' ? 'text-blue-300' : statusDisplay.type === 'failed' ? 'text-red-300' : 'text-green-300'
+            }`}>
+              {statusDisplay.subtitle}
+            </p>
+          </div>
+          {currentStep === 'completed' && mintHash && (
+            <Button
+              size="sm"
+              variant="outline"
+              className="text-green-400 border-green-400/20 hover:bg-green-400/10"
+              asChild
+            >
+              <a
+                href={`https://sepolia.basescan.org/tx/${mintHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1"
+              >
+                View Transaction
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </Button>
+          )}
+        </div>
+      )}
 
       {/* Error Message */}
       {error && (
@@ -155,10 +199,11 @@ export function MintButton() {
       {!showMintAgain ? (
         <Button
           onClick={onMintClick}
-          disabled={isButtonDisabled || clicked}
+          disabled={isButtonDisabled}
           size="lg"
-          className={`w-full h-14 text-lg font-semibold text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${clicked ? "transform scale-95" : ""
-            }`}
+          className={`w-full h-14 text-lg font-semibold text-primary-foreground shadow-lg hover:shadow-xl transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed ${
+            clicked ? "transform scale-95" : ""
+          }`}
           style={{ backgroundColor: "#deeb8b", color: "#191B1C" }}
         >
           <div className="flex items-center gap-3">
@@ -177,12 +222,9 @@ export function MintButton() {
         </Button>
       )}
 
-      {/* Status text for approving/minting */}
-      {isApproving && (
-        <p className="text-center text-sm text-yellow-500">Approving USDC tokens...</p>
-      )}
-      {isMinting && (
-        <p className="text-center text-sm text-blue-500">Minting NFT...</p>
+      {/* Additional status indicators */}
+      {clicked && !statusDisplay && (
+        <p className="text-center text-sm text-blue-400">Initiating transaction...</p>
       )}
 
       {/* Status Messages */}
@@ -192,20 +234,19 @@ export function MintButton() {
         </p>
       )}
 
-      {/* Show NFT link after mint */}
-      {mintHash && (
+      {/* Success celebration - only show if completed and not showing status above */}
+      {currentStep === 'completed' && mintHash && !statusDisplay && (
         <div className="flex items-center gap-2 p-3 bg-green-500/10 border border-green-500/20 rounded-md text-green-400">
           <div className="flex-1 text-sm">
-            <div className="font-medium">🎉 NFT minted!</div>
+            <div className="font-medium">🎉 NFT minted successfully!</div>
             <div>
-              View transaction on&nbsp;
               <a
                 href={`https://sepolia.basescan.org/tx/${mintHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="underline text-green-500 hover:text-green-700"
               >
-                BaseScan
+                View on BaseScan
               </a>
             </div>
           </div>
