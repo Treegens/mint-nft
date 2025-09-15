@@ -147,7 +147,7 @@ export function useMintNFT() {
       setIsMinting(true)
       setError(null)
       await writeContractNFT({
-        address: NFT_CONTRACT_ADDRESS,
+        address: MANAGEMENT_CONTRACT_ADDRESS,
         abi: NFTContractABI,
         functionName: "mintNFTasUser",
       })
