@@ -11,16 +11,13 @@ export function MintButton() {
     isApproving,
     isMinting,
     error,
-    approvalHash,
     mintHash,
     tgnBalance,
     hasEnoughBalance,
     isApproved,
     setError,
-    mintNFT,
     resetMintFlow,
     handleMint,
-    approveTokens,
   } = useMintNFT()
 
   const [clicked, setClicked] = useState(false)
