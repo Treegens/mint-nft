@@ -132,12 +132,12 @@ export default function Home() {
                     asChild
                   >
                     <a
-                      href="https://faucet.circle.com/"
+                      href="https://app.uniswap.org/explore/tokens/base/0xd75dfa972c6136f1c594fec1945302f885e1ab29"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2"
                     >
-                      {"Get TGN Tokens"}
+                      {"Buy TGN on Uniswap (USDC or ETH on Base)"}
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   </Button>
@@ -150,12 +150,12 @@ export default function Home() {
                     asChild
                   >
                     <a
-                      href="https://bridge.base.org/deposit"
+                      href="https://www.relay.link/bridge/base?toCurrency=0xd75dfa972c6136f1c594fec1945302f885e1ab29&showChart=1"
                       target="_blank"
                       rel="noopener noreferrer"
                       className="flex items-center justify-center gap-2"
                     >
-                      {"Bridge to Base Mainnet"}
+                      {"Buy TGN with any Token on Any Chain"}
                       <ExternalLink className="w-4 h-4" />
                     </a>
                   </Button>
